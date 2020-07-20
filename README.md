@@ -6,6 +6,7 @@ Price Alert adds a lines and control panel to a chart. You can set three type of
 
 The panel can be used to quickly set alert levels and turn alert types on/off.
 
+![Price Alert indicator - three types of alert set](https://github.com/EarnForex/PriceAlert/blob/master/README_Images/Price%20Alert%20Indicator%20Three%20Alert%20Types.png)
 
 A detailed description of the indicator is available here:
 https://www.earnforex.com/metatrader-indicators/Price-Alert/
