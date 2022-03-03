@@ -1,3 +1,4 @@
+[![Support Ukraine Badge](https://bit.ly/support-ukraine-now)](https://github.com/support-ukraine/support-ukraine)
 # PriceAlert
 
 Price Alert indicator for MT4 and MT5 by EarnForex.com.
