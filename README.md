@@ -10,6 +10,6 @@ The panel can be used to quickly set alert levels and turn alert types on/off.
 ![Price Alert indicator - three types of alert set](https://github.com/EarnForex/PriceAlert/blob/master/README_Images/Price%20Alert%20Indicator%20Three%20Alert%20Types.png)
 
 A detailed description of the indicator is available here:
-https://www.earnforex.com/metatrader-indicators/Price-Alert/
+https://www.earnforex.com/indicators/Price-Alert/
 
 If you have any suggestions for improvement of this indicator, please create an issue or submit a pull-request.
