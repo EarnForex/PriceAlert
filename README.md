@@ -1,4 +1,4 @@
-[![Support Ukraine Badge](https://bit.ly/support-ukraine-now)](https://github.com/support-ukraine/support-ukraine)
+[![Stand With Ukraine](https://raw.githubusercontent.com/vshymanskyy/StandWithUkraine/main/badges/StandWithUkraine.svg)](https://github.com/vshymanskyy/StandWithUkraine/blob/main/docs/README.md)
 # PriceAlert
 
 Price Alert indicator for MT4 and MT5 by EarnForex.com.
@@ -7,7 +7,7 @@ Price Alert adds a lines and control panel to a chart. You can set three type of
 
 The panel can be used to quickly set alert levels and turn alert types on/off.
 
-![Price Alert indicator - three types of alert set](https://github.com/EarnForex/PriceAlert/blob/master/README_Images/Price%20Alert%20Indicator%20Three%20Alert%20Types.png)
+![Price Alert indicator - two types of alert set](https://github.com/EarnForex/PriceAlert/blob/master/Price%20Alert%20Indicator%20Two%20Alert%20Types.png)
 
 A detailed description of the indicator is available here:
 https://www.earnforex.com/indicators/Price-Alert/
