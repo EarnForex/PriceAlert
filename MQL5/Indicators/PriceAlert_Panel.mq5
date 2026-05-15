@@ -1,11 +1,11 @@
 ﻿//+------------------------------------------------------------------+
-//|                               Copyright 2015-2025, EarnForex.com |
+//|                               Copyright 2015-2026, EarnForex.com |
 //|                                       https://www.earnforex.com/ |
 //+------------------------------------------------------------------+
-#property copyright "Copyright 2015-2025, EarnForex.com"
-#property link      "https://www.earnforex.com/metatrader-indicators/Price-Alert/"
-#property version   "1.06"
-string    Version = "1.06";
+#property copyright "Copyright 2015-2026, EarnForex.com"
+#property link      "https://www.earnforex.com/indicators/Price-Alert/"
+#property version   "1.07"
+string    Version = "1.07";
 
 #property icon      "\\Files\\EF-Icon-64x64px.ico"
 #property indicator_plots 0
@@ -15,6 +15,11 @@ string    Version = "1.06";
 #property description "MetaQuotes ID for push notifications should also be set via MetaTrader."
 
 #property indicator_chart_window
+
+// Chart object names for the three alert lines (used everywhere lines are read/updated/styled).
+#define LINE_ABOVE   "SoundWhenPriceGoesAbove"
+#define LINE_BELOW   "SoundWhenPriceGoesBelow"
+#define LINE_EXACTLY "SoundWhenPriceIsExactly"
 
 // Additional checkbox bitmaps:
 #resource "\\Images\\CheckBoxOnDark.bmp"
@@ -48,15 +53,25 @@ enum ENUM_ALERT_ON_PRICE
     PreviousClose // Previous Close
 };
 
+// Identifies which of the three alert types is being dispatched.
+enum ENUM_ALERT_TYPE
+{
+    ALERT_ABOVE,
+    ALERT_BELOW,
+    ALERT_EXACTLY
+};
+
 input group "Main"
 input double PriceGoesAbove = 0;
 input double PriceGoesBelow = 0;
 input double PriceIsExactly = 0;
-input bool NativeAlert = false; // NativeAlert: If true, a native alert is issued when price level is triggered.
-input bool SendEmail = false; // SendEmail: If true, an e-mail is sent to the e-mail address set in your platform.
-input bool SendPush = false; // SendPush: If true, a push notification is sent to via the platform.
-input bool SendSound = false; // SendSound: If true, a sound alert is issued when price level is triggered.
-input string SoundFile = "alert.wav"; // SoundFile: File name to play on alert.
+input bool NativeAlert = false; // NativeAlert: Issue native alert when price level is triggered.
+input bool SendEmail = false; // SendEmail: Send e-mail when alert is triggered.
+input bool SendPush = false; // SendPush: Send push notification when alert is triggered.
+input bool SendSound = false; // SendSound: Play sound alert when price level is triggered.
+input string SoundFileAbove = "alert.wav"; // SoundFileAbove: File name to play on 'price above' alert.
+input string SoundFileBelow = "alert.wav"; // SoundFileBelow: File name to play on 'price below' alert.
+input string SoundFileIsExactly = "alert.wav"; // SoundFileIsExactly: File name to play on 'is exactly' alert.
 input ENUM_ALERT_ON_PRICE AlertOnPrice = NormalAskBid; // AlertOnPrice: Which price to use for alerts?
 input ENUM_TIMEFRAMES ClosePriceTimeframe = PERIOD_CURRENT; // ClosePriceTimeframe: Timeframe for Close Price when it is used.
 input bool DarkMode = false; // DarkMode: Enable dark mode for a less bright panel.
@@ -89,11 +104,11 @@ struct Settings
     bool AlertEmail;
     bool AlertPush;
     bool AlertSound;
-    ENUM_ALERT_ON_PRICE AlertOnPrice;
+    ENUM_ALERT_ON_PRICE AlertOnPriceSetting;
     bool WasSelectedAbove;
     bool WasSelectedBelow;
     bool WasSelectedExactly;
-    bool HideLines;
+    bool HideLinesSetting;
 } sets;
 
 class CPriceAlertPanel : public CAppDialog
@@ -209,8 +224,8 @@ int OnInit()
         sets.AlertEmail = SendEmail;
         sets.AlertPush = SendPush;
         sets.AlertSound = SendSound;
-        sets.AlertOnPrice = AlertOnPrice;
-        sets.HideLines = HideLines;
+        sets.AlertOnPriceSetting = AlertOnPrice;
+        sets.HideLinesSetting = HideLines;
     }
 
     if (!Panel.Create(0, PanelCaption, 0, DefaultPanelPositionX, DefaultPanelPositionY)) return -1;
@@ -310,17 +325,17 @@ void Initialization()
 {
     if (iBars(Symbol(), Period()) == 0) return; // Data not ready yet.
 
-    if (ObjectFind(0, "SoundWhenPriceGoesAbove") == -1) ObjectCreate(0, "SoundWhenPriceGoesAbove", OBJ_HLINE, 0, TimeCurrent(), sets.PriceAbove);
-    else ObjectSetDouble(0, "SoundWhenPriceGoesAbove", OBJPROP_PRICE, sets.PriceAbove);
-    SetParametersForAboveLine();
+    if (ObjectFind(0, LINE_ABOVE) == -1) ObjectCreate(0, LINE_ABOVE, OBJ_HLINE, 0, TimeCurrent(), sets.PriceAbove);
+    else ObjectSetDouble(0, LINE_ABOVE, OBJPROP_PRICE, sets.PriceAbove);
+    SetParametersForLine(LINE_ABOVE, above_line_color, above_line_style, above_line_width);
+    
+    if (ObjectFind(0, LINE_BELOW) == -1) ObjectCreate(0, LINE_BELOW, OBJ_HLINE, 0, TimeCurrent(), sets.PriceBelow);
+    else ObjectSetDouble(0, LINE_BELOW, OBJPROP_PRICE, sets.PriceBelow);
+    SetParametersForLine(LINE_BELOW, below_line_color, below_line_style, below_line_width);
 
-    if (ObjectFind(0, "SoundWhenPriceGoesBelow") == -1) ObjectCreate(0, "SoundWhenPriceGoesBelow", OBJ_HLINE, 0, TimeCurrent(), sets.PriceBelow);
-    else ObjectSetDouble(0, "SoundWhenPriceGoesBelow", OBJPROP_PRICE, sets.PriceBelow);
-    SetParametersForBelowLine();
-
-    if (ObjectFind(0, "SoundWhenPriceIsExactly") == -1) ObjectCreate(0, "SoundWhenPriceIsExactly", OBJ_HLINE, 0, TimeCurrent(), sets.PriceExactly);
-    else ObjectSetDouble(0, "SoundWhenPriceIsExactly", OBJPROP_PRICE, sets.PriceExactly);
-    SetParametersForExactlyLine();
+    if (ObjectFind(0, LINE_EXACTLY) == -1) ObjectCreate(0, LINE_EXACTLY, OBJ_HLINE, 0, TimeCurrent(), sets.PriceExactly);
+    else ObjectSetDouble(0, LINE_EXACTLY, OBJPROP_PRICE, sets.PriceExactly);
+    SetParametersForLine(LINE_EXACTLY, exactly_line_color, exactly_line_style, exactly_line_width);
 
     Uninitialized = false;
 }
@@ -333,7 +348,7 @@ void OnDeinit(const int reason)
     // If we tried to add a second indicator, do not delete objects.
     if (reason == REASON_INITFAILED) return;
 
-    if ((reason == REASON_REMOVE) || (reason == REASON_PARAMETERS))
+    if (reason == REASON_REMOVE || reason == REASON_PARAMETERS)
     {
         // It is deinitialization due to input parameters change - save current parameters values (that are also changed via panel) to global variables.
         if (reason == REASON_PARAMETERS)
@@ -342,9 +357,9 @@ void OnDeinit(const int reason)
             Panel.SaveSettingsOnDisk();
         }
         else Panel.DeleteSettingsFile();
-        ObjectDelete(0, "SoundWhenPriceIsExactly");
-        ObjectDelete(0, "SoundWhenPriceGoesAbove");
-        ObjectDelete(0, "SoundWhenPriceGoesBelow");
+        ObjectDelete(0, LINE_EXACTLY);
+        ObjectDelete(0, LINE_ABOVE);
+        ObjectDelete(0, LINE_BELOW);
         if (!FileDelete(Panel.IniFileName() + Panel.IniFileExt())) Print("Failed to delete PA panel's .ini file: ", GetLastError());
     }
     else Panel.SaveSettingsOnDisk();
@@ -381,7 +396,7 @@ void OnChartEvent(const int id,
                   const string &sparam)
 {
     // Remember the panel's location to have the same location for minimized and maximized states.
-    if ((id == CHARTEVENT_CUSTOM + ON_DRAG_END) && (lparam == -1))
+    if (id == CHARTEVENT_CUSTOM + ON_DRAG_END && lparam == -1)
     {
         Panel.remember_top = Panel.Top();
         Panel.remember_left = Panel.Left();
@@ -395,8 +410,7 @@ void OnChartEvent(const int id,
     }
 
     // Recalculate on chart changes, clicks, and certain object dragging.
-    if ((id == CHARTEVENT_CLICK) || (id == CHARTEVENT_CHART_CHANGE) ||
-            ((id == CHARTEVENT_OBJECT_DRAG) && ((sparam == "SoundWhenPriceGoesAbove") || (sparam == "SoundWhenPriceGoesBelow") || (sparam == "SoundWhenPriceIsExactly"))))
+    if (id == CHARTEVENT_CLICK || id == CHARTEVENT_CHART_CHANGE || (id == CHARTEVENT_OBJECT_DRAG && (sparam == LINE_ABOVE || sparam == LINE_BELOW || sparam == LINE_EXACTLY)))
     {
         if (id != CHARTEVENT_CHART_CHANGE) Panel.RefreshValues();
 
@@ -611,10 +625,10 @@ bool CPriceAlertPanel::InitObjects()
     if (!m_EdtBelow.TextAlign(align))                                   return false;
     if (!m_EdtExactly.TextAlign(align))                                 return false;
 
-    if (sets.AlertOnPrice == NormalAskBid) m_BtnAlertOnPrice.Text("Normal Ask/Bid");
-    else if (sets.AlertOnPrice == AskOnly) m_BtnAlertOnPrice.Text("Ask only");
-    else if (sets.AlertOnPrice == BidOnly) m_BtnAlertOnPrice.Text("Bid only");
-    else if (sets.AlertOnPrice == PreviousClose) m_BtnAlertOnPrice.Text("Previous Close");
+    if (sets.AlertOnPriceSetting == NormalAskBid) m_BtnAlertOnPrice.Text("Normal Ask/Bid");
+    else if (sets.AlertOnPriceSetting == AskOnly) m_BtnAlertOnPrice.Text("Ask only");
+    else if (sets.AlertOnPriceSetting == BidOnly) m_BtnAlertOnPrice.Text("Bid only");
+    else if (sets.AlertOnPriceSetting == PreviousClose) m_BtnAlertOnPrice.Text("Previous Close");
 
     //+-------------+
     //| Init values.|
@@ -627,7 +641,7 @@ bool CPriceAlertPanel::InitObjects()
     m_ChkEmail.Checked(sets.AlertEmail);
     m_ChkPush.Checked(sets.AlertPush);
     m_ChkSound.Checked(sets.AlertSound);
-    m_ChkHideLines.Checked(sets.HideLines);
+    m_ChkHideLines.Checked(sets.HideLinesSetting);
 
     return true;
 }
@@ -676,37 +690,39 @@ void CPriceAlertPanel::RefreshValues()
 {
     if (Uninitialized) Initialization(); // Helps with 'Waiting for data'. MT4 only solution. MT5 handles this differently.
 
+    double tolerance = _Point / 2; // Tolerance for comparison of doubles.
+
     // Restore the lines if they are missing for some reason.
-    if (ObjectFind(ChartID(), "SoundWhenPriceGoesAbove") < 0)
+    if (ObjectFind(ChartID(), LINE_ABOVE) < 0)
     {
-        ObjectCreate(0, "SoundWhenPriceGoesAbove", OBJ_HLINE, 0, TimeCurrent(), sets.PriceAbove);
-        SetParametersForAboveLine();
+        ObjectCreate(0, LINE_ABOVE, OBJ_HLINE, 0, TimeCurrent(), sets.PriceAbove);
+        SetParametersForLine(LINE_ABOVE, above_line_color, above_line_style, above_line_width);
     }
-    if (ObjectFind(ChartID(), "SoundWhenPriceGoesBelow") < 0)
+    if (ObjectFind(ChartID(), LINE_BELOW) < 0)
     {
-        ObjectCreate(0, "SoundWhenPriceGoesBelow", OBJ_HLINE, 0, TimeCurrent(), sets.PriceBelow);
-        SetParametersForBelowLine();
+        ObjectCreate(0, LINE_BELOW, OBJ_HLINE, 0, TimeCurrent(), sets.PriceBelow);
+        SetParametersForLine(LINE_BELOW, below_line_color, below_line_style, below_line_width);
     }
-    if (ObjectFind(ChartID(), "SoundWhenPriceIsExactly") < 0)
+    if (ObjectFind(ChartID(), LINE_EXACTLY) < 0)
     {
-        ObjectCreate(0, "SoundWhenPriceIsExactly", OBJ_HLINE, 0, TimeCurrent(), sets.PriceExactly);
-        SetParametersForExactlyLine();
+        ObjectCreate(0, LINE_EXACTLY, OBJ_HLINE, 0, TimeCurrent(), sets.PriceExactly);
+        SetParametersForLine(LINE_EXACTLY, exactly_line_color, exactly_line_style, exactly_line_width);
     }
     
-    double new_price_above = NormalizeDouble(ObjectGetDouble(ChartID(), "SoundWhenPriceGoesAbove", OBJPROP_PRICE), _Digits);
-    if (MathAbs(sets.PriceAbove - new_price_above) > _Point / 2)
+    double new_price_above = NormalizeDouble(ObjectGetDouble(ChartID(), LINE_ABOVE, OBJPROP_PRICE), _Digits);
+    if (MathAbs(sets.PriceAbove - new_price_above) > tolerance)
     {
         sets.PriceAbove = new_price_above;
         sets.AboveEnabled = true;
     }
-    double new_price_below = NormalizeDouble(ObjectGetDouble(ChartID(), "SoundWhenPriceGoesBelow", OBJPROP_PRICE), _Digits);
-    if (MathAbs(sets.PriceBelow - new_price_below) > _Point / 2)
+    double new_price_below = NormalizeDouble(ObjectGetDouble(ChartID(), LINE_BELOW, OBJPROP_PRICE), _Digits);
+    if (MathAbs(sets.PriceBelow - new_price_below) > tolerance)
     {
         sets.PriceBelow = new_price_below;
         sets.BelowEnabled = true;
     }
-    double new_price_exactly = NormalizeDouble(ObjectGetDouble(ChartID(), "SoundWhenPriceIsExactly", OBJPROP_PRICE), _Digits);
-    if (MathAbs(sets.PriceExactly - new_price_exactly) > _Point / 2)
+    double new_price_exactly = NormalizeDouble(ObjectGetDouble(ChartID(), LINE_EXACTLY, OBJPROP_PRICE), _Digits);
+    if (MathAbs(sets.PriceExactly - new_price_exactly) > tolerance)
     {
         sets.PriceExactly = new_price_exactly;
         sets.ExactlyEnabled = true;
@@ -718,84 +734,81 @@ void CPriceAlertPanel::RefreshValues()
     if (Bid == 0 || Ask == 0) return; // Protection against connection loss.
 
     double Close = iClose(Symbol(), ClosePriceTimeframe, 1);
+    
+    if (Close == 0) return; // Protection against connection loss.
 
+    // --- ABOVE check ---
     double price = Ask;
-    if (sets.AlertOnPrice == BidOnly) price = Bid;
-    if (sets.AlertOnPrice == PreviousClose) price = Close;
-    if ((sets.AboveEnabled) && ((price > sets.PriceAbove) && (sets.PriceAbove > 0)))
+    if (sets.AlertOnPriceSetting == BidOnly) price = Bid;
+    else if (sets.AlertOnPriceSetting == PreviousClose) price = Close;
+    if (sets.AboveEnabled && price > sets.PriceAbove && sets.PriceAbove > 0)
     {
-        if (sets.AlertNative)
-        {
-            Alert("Price above the alert level - ", DoubleToString(sets.PriceAbove, _Digits), ".");
-        }
-        if (sets.AlertEmail)
-        {
-            SendMail(Symbol() +  " rate above the alert level " + DoubleToString(price, _Digits), Symbol() +  " rate reached " + DoubleToString(price, _Digits) + " level, which is above your alert level of " + DoubleToString(sets.PriceAbove, _Digits) + ".");
-        }
-        if (sets.AlertPush)
-        {
-            SendNotification(Symbol() +  " rate reached " + DoubleToString(price, _Digits) + " level, which is above your alert level of " + DoubleToString(sets.PriceAbove, _Digits) + ".");
-        }
-        if (sets.AlertSound)
-        {
-            PlaySound(SoundFile);
-        }
+        FireAlert(ALERT_ABOVE, sets.PriceAbove, price, SoundFileAbove);
         sets.AboveEnabled = false;
         m_BtnAbove.ColorBackground(CONTROLS_BUTTON_COLOR_ENABLE);
     }
+    // --- BELOW check ---
     price = Bid;
-    if (sets.AlertOnPrice == AskOnly) price = Ask;
-    if (sets.AlertOnPrice == PreviousClose) price = Close;
-    if ((sets.BelowEnabled) && ((price < sets.PriceBelow) && (sets.PriceBelow > 0)))
+    if (sets.AlertOnPriceSetting == AskOnly) price = Ask;
+    else if (sets.AlertOnPriceSetting == PreviousClose) price = Close;
+    if (sets.BelowEnabled && price < sets.PriceBelow && sets.PriceBelow > 0)
     {
-        if (sets.AlertNative)
-        {
-            Alert("Price below the alert level - ", DoubleToString(sets.PriceBelow, _Digits), ".");
-        }
-        if (sets.AlertEmail)
-        {
-            SendMail(Symbol() +  " rate below the alert level " + DoubleToString(price, _Digits), Symbol() +  " rate reached " + DoubleToString(price, _Digits) + " level, which is below your alert level of " + DoubleToString(sets.PriceBelow, _Digits) + ".");
-        }
-        if (sets.AlertPush)
-        {
-            SendNotification(Symbol() +  " rate reached " + DoubleToString(price, _Digits) + " level, which is below your alert level of " + DoubleToString(sets.PriceBelow, _Digits) + ".");
-        }
-        if (sets.AlertSound)
-        {
-            PlaySound(SoundFile);
-        }
+        FireAlert(ALERT_BELOW, sets.PriceBelow, price, SoundFileBelow);
         sets.BelowEnabled = false;
         m_BtnBelow.ColorBackground(CONTROLS_BUTTON_COLOR_ENABLE);
     }
 
-    if ((sets.ExactlyEnabled) && (((sets.AlertOnPrice == NormalAskBid) && ((Bid == sets.PriceExactly) || (Ask == sets.PriceExactly))) || ((sets.AlertOnPrice == AskOnly) && ((Ask == sets.PriceExactly))) || ((sets.AlertOnPrice == BidOnly) && ((Bid == sets.PriceExactly))) || ((sets.AlertOnPrice == PreviousClose) && ((Close == sets.PriceExactly)))))
+    // --- EXACTLY check (double-safe tolerance comparison) ---
+    // Floating-point equality (==) is unreliable for tick prices vs. a stored level, so we treat 'exactly' as 'within half a point' for every price mode.
+    if (sets.ExactlyEnabled && sets.PriceExactly > 0)
     {
-        if (sets.AlertOnPrice == NormalAskBid)
+        bool exactly_hit = false;
+        double exactly_price = 0;
+
+        if (sets.AlertOnPriceSetting == NormalAskBid)
         {
-            price = Bid;
-            if (Ask == sets.PriceExactly) price = Ask;
+            if (MathAbs(Bid - sets.PriceExactly) < tolerance)
+            {
+                exactly_hit = true;
+                exactly_price = Bid;
+            }
+            else if (MathAbs(Ask - sets.PriceExactly) < tolerance)
+            {
+                exactly_hit = true;
+                exactly_price = Ask;
+            }
         }
-        else if (sets.AlertOnPrice == AskOnly) price = Ask;
-        else if (sets.AlertOnPrice == BidOnly) price = Bid;
-        else if (sets.AlertOnPrice == PreviousClose) price = Close;
-        if (sets.AlertNative)
+        else if (sets.AlertOnPriceSetting == AskOnly)
         {
-            Alert("Price is exactly at the alert level - ", DoubleToString(sets.PriceExactly, _Digits), ".");
+            if (MathAbs(Ask - sets.PriceExactly) < tolerance)
+            {
+                exactly_hit = true;
+                exactly_price = Ask;
+            }
         }
-        if (sets.AlertEmail)
+        else if (sets.AlertOnPriceSetting == BidOnly)
         {
-            SendMail(Symbol() +  " rate exactly at the alert level " + DoubleToString(price, _Digits), Symbol() +  " rate reached " + DoubleToString(price, _Digits) + " level, which is exactly at your alert level.");
+            if (MathAbs(Bid - sets.PriceExactly) < tolerance)
+            {
+                exactly_hit = true;
+                exactly_price = Bid;
+            }
         }
-        if (sets.AlertPush)
+        else if (sets.AlertOnPriceSetting == PreviousClose)
         {
-            SendNotification(Symbol() +  " rate reached " + DoubleToString(price, _Digits) + " level, which is exactly at your alert level.");
+            if (MathAbs(Close - sets.PriceExactly) < tolerance)
+            {
+                exactly_hit = true;
+                exactly_price = Close;
+            }
         }
-        if (sets.AlertSound)
+
+        if (exactly_hit)
         {
-            PlaySound(SoundFile);
+            FireAlert(ALERT_EXACTLY, sets.PriceExactly, exactly_price, SoundFileIsExactly);
+            sets.ExactlyEnabled = false;
+            m_BtnExactly.ColorBackground(CONTROLS_BUTTON_COLOR_ENABLE);
         }
-        sets.ExactlyEnabled = false;
-        m_BtnExactly.ColorBackground(CONTROLS_BUTTON_COLOR_ENABLE);
     }
 
     DisplayValues();
@@ -806,24 +819,24 @@ void CPriceAlertPanel::RefreshValues()
 //+------------------------------------------------------------------+
 void CPriceAlertPanel::OnClickBtnAlertOnPrice()
 {
-    if (sets.AlertOnPrice == NormalAskBid)
+    if (sets.AlertOnPriceSetting == NormalAskBid)
     {
-        sets.AlertOnPrice = AskOnly;
+        sets.AlertOnPriceSetting = AskOnly;
         m_BtnAlertOnPrice.Text("Ask only");
     }
-    else if (sets.AlertOnPrice == AskOnly)
+    else if (sets.AlertOnPriceSetting == AskOnly)
     {
-        sets.AlertOnPrice = BidOnly;
+        sets.AlertOnPriceSetting = BidOnly;
         m_BtnAlertOnPrice.Text("Bid only");
     }
-    else if (sets.AlertOnPrice == BidOnly)
+    else if (sets.AlertOnPriceSetting == BidOnly)
     {
-        sets.AlertOnPrice = PreviousClose;
+        sets.AlertOnPriceSetting = PreviousClose;
         m_BtnAlertOnPrice.Text("Previous Close");
     }
-    else if (sets.AlertOnPrice == PreviousClose)
+    else if (sets.AlertOnPriceSetting == PreviousClose)
     {
-        sets.AlertOnPrice = NormalAskBid;
+        sets.AlertOnPriceSetting = NormalAskBid;
         m_BtnAlertOnPrice.Text("Normal Ask/Bid");
     }
 }
@@ -842,7 +855,7 @@ void CPriceAlertPanel::OnClickBtnAbove()
         {
             sets.PriceAbove = iHigh(Symbol(), Period(), 0);
             m_EdtAbove.Text(DoubleToString(sets.PriceAbove, _Digits));
-            ObjectSetDouble(ChartID(), "SoundWhenPriceGoesAbove", OBJPROP_PRICE, sets.PriceAbove);
+            ObjectSetDouble(ChartID(), LINE_ABOVE, OBJPROP_PRICE, sets.PriceAbove);
         }
         m_BtnAbove.ColorBackground(CONTROLS_BUTTON_COLOR_DISABLE);
     }
@@ -862,7 +875,7 @@ void CPriceAlertPanel::OnClickBtnBelow()
         {
             sets.PriceBelow = iLow(Symbol(), Period(), 0);
             m_EdtBelow.Text(DoubleToString(sets.PriceBelow, _Digits));
-            ObjectSetDouble(ChartID(), "SoundWhenPriceGoesBelow", OBJPROP_PRICE, sets.PriceBelow);
+            ObjectSetDouble(ChartID(), LINE_BELOW, OBJPROP_PRICE, sets.PriceBelow);
         }
         m_BtnBelow.ColorBackground(CONTROLS_BUTTON_COLOR_DISABLE);
     }
@@ -882,7 +895,7 @@ void CPriceAlertPanel::OnClickBtnExactly()
         {
             sets.PriceExactly = NormalizeDouble((iHigh(Symbol(), Period(), 0) + iLow(Symbol(), Period(), 0)) / 2, _Digits);
             m_EdtExactly.Text(DoubleToString(sets.PriceExactly, _Digits));
-            ObjectSetDouble(ChartID(), "SoundWhenPriceIsExactly", OBJPROP_PRICE, sets.PriceExactly);
+            ObjectSetDouble(ChartID(), LINE_EXACTLY, OBJPROP_PRICE, sets.PriceExactly);
         }
         m_BtnExactly.ColorBackground(CONTROLS_BUTTON_COLOR_DISABLE);
     }
@@ -893,7 +906,7 @@ void CPriceAlertPanel::OnEndEditEdtAbove()
     if (sets.PriceAbove != StringToDouble(m_EdtAbove.Text()))
     {
         sets.PriceAbove = StringToDouble(m_EdtAbove.Text());
-        ObjectSetDouble(ChartID(), "SoundWhenPriceGoesAbove", OBJPROP_PRICE, sets.PriceAbove);
+        ObjectSetDouble(ChartID(), LINE_ABOVE, OBJPROP_PRICE, sets.PriceAbove);
         RefreshValues();
         if (sets.PriceAbove == 0)
         {
@@ -913,7 +926,7 @@ void CPriceAlertPanel::OnEndEditEdtBelow()
     if (sets.PriceBelow != StringToDouble(m_EdtBelow.Text()))
     {
         sets.PriceBelow = StringToDouble(m_EdtBelow.Text());
-        ObjectSetDouble(ChartID(), "SoundWhenPriceGoesBelow", OBJPROP_PRICE, sets.PriceBelow);
+        ObjectSetDouble(ChartID(), LINE_BELOW, OBJPROP_PRICE, sets.PriceBelow);
         RefreshValues();
         if (sets.PriceBelow == 0)
         {
@@ -933,7 +946,7 @@ void CPriceAlertPanel::OnEndEditEdtExactly()
     if (sets.PriceExactly != StringToDouble(m_EdtExactly.Text()))
     {
         sets.PriceExactly = StringToDouble(m_EdtExactly.Text());
-        ObjectSetDouble(ChartID(), "SoundWhenPriceIsExactly", OBJPROP_PRICE, sets.PriceExactly);
+        ObjectSetDouble(ChartID(), LINE_EXACTLY, OBJPROP_PRICE, sets.PriceExactly);
         RefreshValues();
         if (sets.PriceExactly == 0)
         {
@@ -970,24 +983,24 @@ void CPriceAlertPanel::OnChangeChkSound()
 
 void CPriceAlertPanel::OnChangeChkHideLines()
 {
-    sets.HideLines = m_ChkHideLines.Checked();
-    if (sets.HideLines)
+    sets.HideLinesSetting = m_ChkHideLines.Checked();
+    if (sets.HideLinesSetting)
     {
-        sets.WasSelectedAbove = ObjectGetInteger(ChartID(), "SoundWhenPriceGoesAbove", OBJPROP_SELECTED);
-        sets.WasSelectedBelow = ObjectGetInteger(ChartID(), "SoundWhenPriceGoesBelow", OBJPROP_SELECTED);
-        sets.WasSelectedExactly = ObjectGetInteger(ChartID(), "SoundWhenPriceIsExactly", OBJPROP_SELECTED);
-        ObjectSetInteger(0, "SoundWhenPriceGoesAbove", OBJPROP_TIMEFRAMES, OBJ_NO_PERIODS);
-        ObjectSetInteger(0, "SoundWhenPriceGoesBelow", OBJPROP_TIMEFRAMES, OBJ_NO_PERIODS);
-        ObjectSetInteger(0, "SoundWhenPriceIsExactly", OBJPROP_TIMEFRAMES, OBJ_NO_PERIODS);
+        sets.WasSelectedAbove = ObjectGetInteger(ChartID(), LINE_ABOVE, OBJPROP_SELECTED);
+        sets.WasSelectedBelow = ObjectGetInteger(ChartID(), LINE_BELOW, OBJPROP_SELECTED);
+        sets.WasSelectedExactly = ObjectGetInteger(ChartID(), LINE_EXACTLY, OBJPROP_SELECTED);
+        ObjectSetInteger(0, LINE_ABOVE, OBJPROP_TIMEFRAMES, OBJ_NO_PERIODS);
+        ObjectSetInteger(0, LINE_BELOW, OBJPROP_TIMEFRAMES, OBJ_NO_PERIODS);
+        ObjectSetInteger(0, LINE_EXACTLY, OBJPROP_TIMEFRAMES, OBJ_NO_PERIODS);
     }
     else
     {
-        ObjectSetInteger(0, "SoundWhenPriceGoesAbove", OBJPROP_TIMEFRAMES, OBJ_ALL_PERIODS);
-        ObjectSetInteger(0, "SoundWhenPriceGoesBelow", OBJPROP_TIMEFRAMES, OBJ_ALL_PERIODS);
-        ObjectSetInteger(0, "SoundWhenPriceIsExactly", OBJPROP_TIMEFRAMES, OBJ_ALL_PERIODS);
-        ObjectSetInteger(0, "SoundWhenPriceGoesAbove", OBJPROP_SELECTED, sets.WasSelectedAbove);
-        ObjectSetInteger(0, "SoundWhenPriceGoesBelow", OBJPROP_SELECTED, sets.WasSelectedBelow);
-        ObjectSetInteger(0, "SoundWhenPriceIsExactly", OBJPROP_SELECTED, sets.WasSelectedExactly);
+        ObjectSetInteger(0, LINE_ABOVE, OBJPROP_TIMEFRAMES, OBJ_ALL_PERIODS);
+        ObjectSetInteger(0, LINE_BELOW, OBJPROP_TIMEFRAMES, OBJ_ALL_PERIODS);
+        ObjectSetInteger(0, LINE_EXACTLY, OBJPROP_TIMEFRAMES, OBJ_ALL_PERIODS);
+        ObjectSetInteger(0, LINE_ABOVE, OBJPROP_SELECTED, sets.WasSelectedAbove);
+        ObjectSetInteger(0, LINE_BELOW, OBJPROP_SELECTED, sets.WasSelectedBelow);
+        ObjectSetInteger(0, LINE_EXACTLY, OBJPROP_SELECTED, sets.WasSelectedExactly);
     }
 }
 
@@ -1028,9 +1041,9 @@ bool CPriceAlertPanel::SaveSettingsOnDisk()
     FileWrite(fh, "AlertSound");
     FileWrite(fh, IntegerToString(sets.AlertSound));
     FileWrite(fh, "AlertOnPrice");
-    FileWrite(fh, IntegerToString(sets.AlertOnPrice));
+    FileWrite(fh, IntegerToString(sets.AlertOnPriceSetting));
     FileWrite(fh, "HideLines");
-    FileWrite(fh, IntegerToString(sets.HideLines));
+    FileWrite(fh, IntegerToString(sets.HideLinesSetting));
     FileWrite(fh, "WasSelectedAbove");
     FileWrite(fh, IntegerToString(sets.WasSelectedAbove));
     FileWrite(fh, "WasSelectedBelow");
@@ -1120,9 +1133,9 @@ bool CPriceAlertPanel::LoadSettingsFromDisk()
         else if (var_name == "AlertSound")
             sets.AlertSound = (bool)StringToInteger(var_content);
         else if (var_name == "AlertOnPrice")
-            sets.AlertOnPrice = (ENUM_ALERT_ON_PRICE)StringToInteger(var_content);
+            sets.AlertOnPriceSetting = (ENUM_ALERT_ON_PRICE)StringToInteger(var_content);
         else if (var_name == "HideLines")
-            sets.HideLines = (bool)StringToInteger(var_content);
+            sets.HideLinesSetting = (bool)StringToInteger(var_content);
         else if (var_name == "WasSelectedAbove")
             sets.WasSelectedAbove = (bool)StringToInteger(var_content);
         else if (var_name == "WasSelectedBelow")
@@ -1167,7 +1180,7 @@ bool CPriceAlertPanel::LoadSettingsFromDisk()
             }
             else if (var_name == "Parameter_AlertOnPrice")
             {
-                if ((ENUM_ALERT_ON_PRICE)StringToInteger(var_content) != AlertOnPrice) sets.AlertOnPrice = AlertOnPrice;
+                if ((ENUM_ALERT_ON_PRICE)StringToInteger(var_content) != AlertOnPrice) sets.AlertOnPriceSetting = AlertOnPrice;
             }
             // These three only trigger panel repositioning (default position changed via the input parameters deliberately).
             else if (var_name == "Parameter_DefaultPanelPositionCorner")
@@ -1184,7 +1197,7 @@ bool CPriceAlertPanel::LoadSettingsFromDisk()
             }
             else if (var_name == "Parameter_HideLines")
             {
-                if ((bool)StringToInteger(var_content) != HideLines) sets.HideLines = HideLines;
+                if ((bool)StringToInteger(var_content) != HideLines) sets.HideLinesSetting = HideLines;
             }
         }
     }
@@ -1264,40 +1277,59 @@ void CPriceAlertPanel::SeekAndDestroyDuplicatePanels()
     }
 }
 
-void SetParametersForAboveLine()
+//+------------------------------------------------------------------+
+//| Dispatches the four configured alert channels (popup/email/push/ |
+//| sound) for one of the three alert types. Replaces three nearly   |
+//| identical inline blocks in RefreshValues().                      |
+//+------------------------------------------------------------------+
+void FireAlert(const ENUM_ALERT_TYPE type, const double level, const double price, const string sound_file)
 {
-    ObjectSetInteger(0, "SoundWhenPriceGoesAbove", OBJPROP_STYLE, above_line_style);
-    ObjectSetInteger(0, "SoundWhenPriceGoesAbove", OBJPROP_COLOR, above_line_color);
-    ObjectSetInteger(0, "SoundWhenPriceGoesAbove", OBJPROP_WIDTH, above_line_width);
-    ObjectSetInteger(0, "SoundWhenPriceGoesAbove", OBJPROP_SELECTABLE, true);
-    ObjectSetInteger(0, "SoundWhenPriceGoesAbove", OBJPROP_SELECTED, true);
-    ObjectSetInteger(0, "SoundWhenPriceGoesAbove", OBJPROP_BACK, true);
-    if (sets.HideLines) ObjectSetInteger(0, "SoundWhenPriceGoesAbove", OBJPROP_TIMEFRAMES, OBJ_NO_PERIODS);
-    else ObjectSetInteger(0, "SoundWhenPriceGoesAbove", OBJPROP_TIMEFRAMES, OBJ_ALL_PERIODS);
+    string level_str  = DoubleToString(level, _Digits);
+    string price_str  = DoubleToString(price, _Digits);
+    string period_str = EnumToString((ENUM_TIMEFRAMES)Period());
+    string alert_phrase, subj_phrase, body_phrase;
+
+    if (type == ALERT_ABOVE)
+    {
+        alert_phrase = "Price above the alert level";
+        subj_phrase  = " rate above the alert level ";
+        body_phrase  = "which is above your alert level of " + level_str + ".";
+    }
+    else if (type == ALERT_BELOW)
+    {
+        alert_phrase = "Price below the alert level";
+        subj_phrase  = " rate below the alert level ";
+        body_phrase  = "which is below your alert level of " + level_str + ".";
+    }
+    else // ALERT_EXACTLY
+    {
+        alert_phrase = "Price is exactly at the alert level";
+        subj_phrase  = " rate exactly at the alert level ";
+        body_phrase  = "which is exactly at your alert level.";
+    }
+
+    string body = Symbol() + ", " + period_str + ": rate reached " + price_str + " level, " + body_phrase;
+
+    if (sets.AlertNative) Alert(alert_phrase, " - ", level_str, ".");
+    if (sets.AlertEmail)  SendMail(Symbol() + subj_phrase + price_str, body);
+    if (sets.AlertPush)   SendNotification(body);
+    if (sets.AlertSound)  PlaySound(sound_file);
 }
 
-void SetParametersForBelowLine()
+//+------------------------------------------------------------------+
+//| Applies visual/behavior properties to one of the three alert     |
+//| lines. Replaces the previous trio of near-identical functions.   |
+//+------------------------------------------------------------------+
+void SetParametersForLine(const string line_name, const color line_color, const ENUM_LINE_STYLE line_style, const uint line_width)
 {
-    ObjectSetInteger(0, "SoundWhenPriceGoesBelow", OBJPROP_STYLE, below_line_style);
-    ObjectSetInteger(0, "SoundWhenPriceGoesBelow", OBJPROP_COLOR, below_line_color);
-    ObjectSetInteger(0, "SoundWhenPriceGoesBelow", OBJPROP_WIDTH, below_line_width);
-    ObjectSetInteger(0, "SoundWhenPriceGoesBelow", OBJPROP_SELECTABLE, true);
-    ObjectSetInteger(0, "SoundWhenPriceGoesBelow", OBJPROP_SELECTED, true);
-    ObjectSetInteger(0, "SoundWhenPriceGoesBelow", OBJPROP_BACK, true);
-    if (sets.HideLines) ObjectSetInteger(0, "SoundWhenPriceGoesBelow", OBJPROP_TIMEFRAMES, OBJ_NO_PERIODS);
-    else ObjectSetInteger(0, "SoundWhenPriceGoesBelow", OBJPROP_TIMEFRAMES, OBJ_ALL_PERIODS);
-}
-
-void SetParametersForExactlyLine()
-{
-    ObjectSetInteger(0, "SoundWhenPriceIsExactly", OBJPROP_STYLE, exactly_line_style);
-    ObjectSetInteger(0, "SoundWhenPriceIsExactly", OBJPROP_COLOR, exactly_line_color);
-    ObjectSetInteger(0, "SoundWhenPriceIsExactly", OBJPROP_WIDTH, exactly_line_width);
-    ObjectSetInteger(0, "SoundWhenPriceIsExactly", OBJPROP_SELECTABLE, true);
-    ObjectSetInteger(0, "SoundWhenPriceIsExactly", OBJPROP_SELECTED, true);
-    ObjectSetInteger(0, "SoundWhenPriceIsExactly", OBJPROP_BACK, true);
-    if (sets.HideLines) ObjectSetInteger(0, "SoundWhenPriceIsExactly", OBJPROP_TIMEFRAMES, OBJ_NO_PERIODS);
-    else ObjectSetInteger(0, "SoundWhenPriceIsExactly", OBJPROP_TIMEFRAMES, OBJ_ALL_PERIODS);
+    ObjectSetInteger(0, line_name, OBJPROP_STYLE, line_style);
+    ObjectSetInteger(0, line_name, OBJPROP_COLOR, line_color);
+    ObjectSetInteger(0, line_name, OBJPROP_WIDTH, line_width);
+    ObjectSetInteger(0, line_name, OBJPROP_SELECTABLE, true);
+    ObjectSetInteger(0, line_name, OBJPROP_SELECTED, true);
+    ObjectSetInteger(0, line_name, OBJPROP_BACK, true);
+    if (sets.HideLinesSetting) ObjectSetInteger(0, line_name, OBJPROP_TIMEFRAMES, OBJ_NO_PERIODS);
+    else ObjectSetInteger(0, line_name, OBJPROP_TIMEFRAMES, OBJ_ALL_PERIODS);
 }
 
 // true = dark mode
